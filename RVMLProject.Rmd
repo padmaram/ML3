@@ -1,0 +1,145 @@
+---
+title: "RVML_Project.Rmd"
+output:
+  html_document:
+    fig_caption: yes
+    keep_md: yes
+    number_sections: yes
+    toc: yes
+  word_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Practical Machine Learning 
+## Date : 4/23/2017 
+
+
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+## Data:
+The training data for this project are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. 
+
+## Goal:
+The goal of the project is to predict the manner in which the exercise was done. This is the "classe" variable in the training set. Other variables may be used to predict with. A report describing how the model was built including how cross validation was used, the expected out of sample error and why the choices made were done. Also utilize the prediction model to predict 20 different test cases. 
+
+## Loading data:
+```{r}
+library(caret)
+library(rattle)
+library(rpart)
+library(rpart.plot)
+trainUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+training <- read.csv(url(trainUrl), na.strings=c("NA","#DIV/0!",""))
+testing <- read.csv(url(testUrl), na.strings=c("NA","#DIV/0!",""))
+dim(training) ; dim(testing)
+```
+## Data Cleaning: 
+Let's do some cleaning before we split the data.
+Let's delete rows with missing values and columns that may be contextual and not provide any prediction
+```{r}
+training <- training[, colSums(is.na(training)) == 0]
+testing <- testing[, colSums(is.na(testing)) == 0]
+training <- training[, -c(1:7)]
+testing <- testing[, -c(1:7)]
+dim(training); dim(testing)
+```
+
+Now partition the dataset into 2 pieces for training and validating
+```{r}
+inTrain <- createDataPartition(training$classe, p=0.7, list=FALSE)
+myTraining <- training[inTrain, ]
+myvalidating <- training[-inTrain, ]
+dim(myTraining); dim(myvalidating)
+```
+## Prediction Algorithms:
+We will use classification trees, Neural Net and Random forests to predict the outcome with cross validation.
+
+### Classification Trees with k-fold cross validation
+Let's use the default 10 fold , 10 times cross validation here. 
+
+```{r}
+set.seed(123)
+foldcontrol <- trainControl(method = "cv", number = 10, repeats = 10)
+fitrpart <- train(classe ~ ., data = myTraining, method = "rpart", 
+                   trControl = foldcontrol)
+print(fitrpart, digits = 4)
+```
+
+```{r}
+fancyRpartPlot(fitrpart$finalModel)
+```
+####Predict outcomes using the "myvalidating " set
+```{r}
+predict_rpart <- predict(fitrpart, myvalidating)
+
+## Show output
+confusionMatrix(myvalidating$classe, predict_rpart)
+
+confusionMatrix(myvalidating$classe, predict_rpart)$overall
+confusionMatrix(myvalidating$classe, predict_rpart)$overall[1]
+```
+#### Observation on k-fold Cross validation 
+The confustion Matrix shows an accuracy rate with K-fold cross validation (10 fold, 10 times) is only 0.49. So the out-of-sample error rate is 0.51. Using classification tree does not predict the outcome classe very well. 
+
+### Neural Networks:
+Now let's see what Neural Networks can do
+```{r}
+fit_nn <- train(classe ~ ., data = myTraining, method = "nnet", 
+                   trControl = foldcontrol,  returnResamp = "all", verboseIter = FALSE)
+print(fit_nn, digits = 4)
+```
+####Predict outcomes using the "myvalidating " set
+Now let's look at the prediction on the validation set..
+
+```{r}
+predict_nn_validating <- predict(fit_nn, myvalidating)
+conf_nn_validating <- confusionMatrix(myvalidating$classe, predict_nn_validating)
+conf_nn_validating
+```  
+####Observation on Neural Networks: 
+Neural Networks gives an accuracy of .36 and the out-of-sample error is about .64. Looking at balanced accuracy for the various classes it ranges from .51 - .64; 
+
+### Random Forest
+Now lets see what Random forest can do.
+```{r}
+fit_rf <- train(classe ~ ., data = myTraining, method = "rf", 
+                   trControl = foldcontrol)
+print(fit_rf, digits = 4)
+```
+####Predict outcomes using the "myvalidating " set
+Now let's look at the prediction on the validation set..
+
+```{r}
+predict_rf_validating <- predict(fit_rf, myvalidating)
+conf_rf_validating <- confusionMatrix(myvalidating$classe, predict_rf_validating)
+conf_rf_validating
+```  
+####Observation on Random Forest: 
+The Random forest computationally was very expensive and was not efficient. For this dataset, random forest method is way better than classification tree method. The accuracy rate is 0.99. So out-of-sample error is only about 0.01.
+
+
+## Prediction on the Testing Data:
+
+Having identified Random forest is better of the two - we can now run it on the test data. 
+
+Let now predict the outcome on the testing set..
+
+```{r}
+predict_rf_testing <-predict(fit_rf, testing)
+predict_rf_testing
+```
+
+
